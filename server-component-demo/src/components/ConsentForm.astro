@@ -1,0 +1,27 @@
+---
+import { ConsentFormFields } from "./ConsentFormFields";
+const { data } = Astro.props;
+---
+<section>
+  <header>
+    <h2>{data.reservation.eventName}</h2>
+    <p>{data.reservation.waveDate}</p>
+  </header>
+  <h2>Your Details</h2>
+  <div>
+    <p>
+      Hi {data.participant.forename}, this is your reference:{' '}
+      <b>{data.participant.participantReference}</b>
+    </p>
+    <a href="#">Something wrong? Contact Us</a>
+  </div>
+  {data.showMarketingConsent ? (
+    <ConsentFormFields
+      participantId={data.participantId}
+      reservationId={data.reservationId}
+      client:load
+    />
+  ) : (
+    ''
+  )}
+</section>

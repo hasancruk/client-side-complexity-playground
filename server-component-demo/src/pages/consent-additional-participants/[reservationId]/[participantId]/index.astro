@@ -1,0 +1,16 @@
+---
+import Layout from "../../../../components/Layout.astro";
+import ConsentForm from "../../../../components/ConsentForm.astro";
+import { getParticipantData } from "../../../../data";
+
+const { participantId, reservationId } = Astro.params;
+const data = await getParticipantData(participantId, reservationId);
+
+if (data === "redirect") {
+  return Astro.redirect("/404");
+}
+---
+
+<Layout title="consent">
+  <ConsentForm data={{ ...data, participantId, reservationId }} />
+</Layout>
