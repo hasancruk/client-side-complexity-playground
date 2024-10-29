@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import type { FC } from 'hono/jsx';
-import { getParticipantData } from './data.js';
+import { getParticipantData, updateSuppressionPreferences } from './data.js';
 
 const app = new Hono();
 
@@ -10,7 +10,7 @@ app.get('/404', (c) => {
   );
 });
 
-app.get('/consent-additional-participants/:reservationId/:participantId', async (c) => {
+async function consentGetHandler(c: any) {
   const reservationId = c.req.param('reservationId');
   const participantId = c.req.param('participantId');
   const data = await getParticipantData(participantId, reservationId);
@@ -26,8 +26,53 @@ app.get('/consent-additional-participants/:reservationId/:participantId', async 
       reservationId={reservationId} 
     />
   );
-});
+}
 
+app.get('/consent-additional-participants/:reservationId/:participantId', consentGetHandler);
+
+const cache = new Set();
+
+app.post('/consent-additional-participants/:reservationId/:participantId', async (c) => {
+  const reservationId = c.req.param('reservationId');
+  const participantId = c.req.param('participantId');
+
+  if (c.req.header("Content-Type") === "application/x-www-form-urlencoded") {
+    if (cache.has(`${reservationId}/${participantId}`)) {
+      return await consentGetHandler(c);
+    }
+
+    const formData = await c.req.formData();
+    const data = formData.get("preferences");
+    const { ok } = await updateSuppressionPreferences(
+      data,
+      participantId,
+      reservationId,
+    );
+    if (!ok) {
+      c.status(400);
+      return c.html(
+        <ErrorPage />
+      );
+    }
+
+    cache.add(`${reservationId}/${participantId}`);
+    return c.html(
+      <ThankYouPage />
+    );
+  } else {
+    const data = await c.req.json();
+    const { ok, message } = await updateSuppressionPreferences(
+      data,
+      participantId,
+      reservationId,
+    );
+    if (!ok) {
+      c.status(404);
+      return c.json(message);
+    }
+    return c.json(message);
+  }
+});
 
 const Layout: FC = ({ title, children }) => {
   return (
@@ -51,6 +96,28 @@ const ConsentPage: FC = ({ data, participantId, reservationId }) => {
   return (
     <Layout title="consent">
       <ConsentForm data={{ ...data, participantId, reservationId }} />
+    </Layout>
+  );
+};
+
+const ThankYouPage = () => {
+  return (
+    <Layout title="consent">
+      <section>
+        <h3 data-thanks-message>
+          Thank you, you have submitted your preferences!
+        </h3>
+      </section>
+    </Layout>
+  );
+};
+
+const ErrorPage = () => {
+  return (
+    <Layout title="consent">
+      <section>
+        <p>Something went wrong updating your preferences</p>
+      </section>
     </Layout>
   );
 };
@@ -101,20 +168,21 @@ const ConsentFormFields: FC = ({ participantId, reservationId }) => {
       </h3>
       <form 
         name="primary-page" 
+        method="post"
         data-display="block"
       >
         <label>
           <span>Your preferences</span>
           <input type="text" name="preferences" />
         </label>
+        <input type="hidden" id="reservationId" name="reservationId" value={reservationId} />
+        <input type="hidden" id="participantId" name="participantId" value={participantId} />
         <button>
           Confirm
         </button>
       </form>
       <script
         dangerouslySetInnerHTML={{ __html: `
-          const participantId = "${participantId}";
-          const reservationId = "${reservationId}";
           const form = document.querySelector("form[name='primary-page']");
           const submit = document.querySelector("form > button");
 
@@ -127,17 +195,23 @@ const ConsentFormFields: FC = ({ participantId, reservationId }) => {
 
           form.addEventListener("submit", async (e) => {
             e.preventDefault();
+
+            const data = new FormData(e.target);
+            const participantId = data.get("participantId");
+            const reservationId = data.get("reservationId");
+            const preferences = data.get("preferences");
+            const actionUrl = document.baseURI;
+
             submit.setAttribute("disabled", "");
             submit.textContent = "Loading...";
 
-            const requestBody = ["something", "potato", "privacy"];
+            const requestBody = [preferences];
 
             console.log(requestBody);
 
             const response = await updateSuppressionPreferences(
               requestBody,
-              participantId,
-              reservationId
+              actionUrl,
             );
             if (response) {
               setApplied();
@@ -147,25 +221,21 @@ const ConsentFormFields: FC = ({ participantId, reservationId }) => {
             }
           });
 
-          const PROXY_API = 'https://proxy-pr-1064.int.events.app.crnet.org';
           async function updateSuppressionPreferences(
             data,
-            participantId,
-            reservationId
+            actionUrl,
           ) {
             try {
-              const res = await fetch(
-                \`\${PROXY_API}/save-participant-consent/\${reservationId}/\${participantId}\`,
-                {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify(data),
-                }
-              );
+              const res = await fetch(actionUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data),
+              });
               if (!res.ok) {
                 throw new Error("Couldn't submit consent");
               }
-              return res.json();
+              const { message } = await res.json();
+              return message;
             } catch (error) {
               console.log("Unable to update suppressions")
               return false;
