@@ -104,7 +104,7 @@ app.get("/dashboard/add-new-registration/:waveCode", async (c) => {
 const Form = ({ wave }: { wave: Wave; }) => (
   <>
     <EventSummary wave={wave} />
-    <div hx-swap-oob="outerHTML:#ticket-selection">
+    <div hx-swap-oob="outerHTML:#ticket-selection" id="ticket-selection">
       <p>Form for {wave.waveCode}</p>
     </div>
   </>
