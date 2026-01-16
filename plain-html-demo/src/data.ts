@@ -43,7 +43,7 @@ export async function updateSuppressionPreferences(
   data: any,
   participantId: string,
   reservationId: string
-): Promise<boolean> {
+): Promise<{ ok: boolean; message: any; }> {
   try {
     const res = await fetch(
       `${PROXY_API}/save-participant-consent/${reservationId}/${participantId}`,
@@ -56,9 +56,9 @@ export async function updateSuppressionPreferences(
     if (!res.ok) {
       throw new Error("Couldn't submit consent");
     }
-    return res.json();
+    return { ok: true, message: await res.json() };
   } catch (error: any) {
     console.log("Unable to update suppressions")
-    return false;
+    return { ok: false, message: error };
   }
 }
